@@ -81,6 +81,22 @@ export const i18n = {
     toneBell: 'Brass Alarm Bell',
     toneSiren: 'Emergency Siren',
     tonePing: 'Soft Polite Ping',
+    toneChime: 'Harmonic Glass Chime',
+    toneArcade: 'Arcade Retro Beep',
+    toneEmergency: 'Urgent Alarm Siren',
+    toneCustom: 'Custom Uploaded Sound',
+    alertProfiles: 'Strategy Presets / Alert Profiles',
+    alertProfilesDesc: '1-click optimized presets for Scalping, Swing, Hodling & Flash Crash Hunter',
+    customRingtone: 'Custom Ringtone & Audio Upload',
+    uploadCustomAudio: 'Upload Audio (.mp3, .wav, .ogg)',
+    noCustomSounds: 'No custom ringtones uploaded yet. Upload your favorite audio alarm.',
+    searchCryptoPrompt: 'Search by Symbol, English Name, Network (Solana, TON, ERC-20, Kaspa)...',
+    allCategories: 'All Coins',
+    catL1: 'Layer 1 / 2',
+    catMeme: 'Meme Coins',
+    catAI: 'AI & DePIN',
+    catDeFi: 'DeFi & RWA',
+    catGaming: 'Gaming',
     testSound: 'Test Sound',
     voiceAlerts: 'Text-to-Speech (TTS) Voice Alarm',
     vibration: 'Vibration Feedback',
@@ -200,6 +216,22 @@ export const i18n = {
     toneBell: 'زنگ سنتی فلزی',
     toneSiren: 'آژیر اورژانسی و فوری',
     tonePing: 'صدای پینگ نرم',
+    toneChime: 'زنگ هارمونیک کریستال',
+    toneArcade: 'صدای سکه آرکید رترو',
+    toneEmergency: 'آژیر اورژانسی پرقدرت',
+    toneCustom: 'صدای آپلود شده سفارشی',
+    alertProfiles: 'پروفایل‌های استراتژی هشدار',
+    alertProfilesDesc: 'استراتژی‌های آماده با یک کلیک برای اسکالپینگ، سوئینگ، هولدینگ و شکار ریزش',
+    customRingtone: 'زنگ هشدار سفارشی (آپلود صوت)',
+    uploadCustomAudio: 'آپلود فایل صوتی (.mp3, .wav, .ogg)',
+    noCustomSounds: 'هنوز فایل صوتی سفارشی اضافه نشده است. فایل دلخواه خود را آپلود کنید.',
+    searchCryptoPrompt: 'جستجو با نماد، نام انگلیسی، شبکه (سولانا، تون، ERC-20، کاسپا)...',
+    allCategories: 'همه ارزها',
+    catL1: 'لایه ۱ و ۲',
+    catMeme: 'میم‌کوین‌ها',
+    catAI: 'هوش مصنوعی و دی‌پین',
+    catDeFi: 'دیفای و RWA',
+    catGaming: 'گیمینگ',
     testSound: 'تست پخش صدا',
     voiceAlerts: 'اعلام صوتی هوشمند قیمت (TTS)',
     vibration: 'لرزش گوشی (Vibration)',
@@ -846,8 +878,12 @@ export const i18n = {
   },
 };
 
-export function getTranslation(lang: AppLanguage) {
-  return i18n[lang] || i18n.en;
+export function getTranslation(lang: AppLanguage): typeof i18n.en {
+  const dict = i18n[lang] || i18n.en;
+  return {
+    ...i18n.en,
+    ...dict,
+  };
 }
 
 export function getLanguageDirection(lang: AppLanguage): 'rtl' | 'ltr' {

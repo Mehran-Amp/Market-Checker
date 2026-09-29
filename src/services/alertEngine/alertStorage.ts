@@ -193,13 +193,20 @@ export class AlertStorage {
 
   // --- BitcoinChecker Backup & Restore ---
   public static exportFullBackup(): string {
+    let customSounds = [];
+    try {
+      const raw = localStorage.getItem('crypto_custom_sounds_hive');
+      customSounds = raw ? JSON.parse(raw) : [];
+    } catch (e) {}
+
     const backup = {
-      version: '1.2.0',
+      version: '2.0.0',
       exportedAt: new Date().toISOString(),
-      source: 'CryptoAlert Pulse (BitcoinChecker Engine)',
+      source: 'Market Checker (BitcoinChecker Engine)',
       alerts: this.getAllAlerts(),
       settings: this.getSettings(),
-      logs: this.getLogs()
+      logs: this.getLogs(),
+      customSounds
     };
     return JSON.stringify(backup, null, 2);
   }
@@ -215,6 +222,9 @@ export class AlertStorage {
       }
       if (Array.isArray(parsed.logs)) {
         localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(parsed.logs));
+      }
+      if (Array.isArray(parsed.customSounds)) {
+        localStorage.setItem('crypto_custom_sounds_hive', JSON.stringify(parsed.customSounds));
       }
       return true;
     } catch (e) {

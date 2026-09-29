@@ -1,10 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { Alert, AlertDirection, AlertType, ExchangeName, AppSettings, SoundTone } from '../types/crypto';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Alert,
+  AlertDirection,
+  AlertType,
+  ExchangeName,
+  AppSettings,
+  SoundTone,
+  CustomSoundItem,
+  AlertProfilePreset,
+  AlertProfilePresetId,
+} from '../types/crypto';
 import {
   EXCHANGES_CATALOG,
   POPULAR_CRYPTO_ASSETS,
   SUPPORTED_QUOTE_CURRENCIES,
+  ALERT_PROFILE_PRESETS,
   formatCurrencyPrice,
+  searchCryptoCatalog,
+  CryptoAsset,
 } from '../services/exchanges/symbolData';
 import { ExchangeManager } from '../services/exchanges/exchangeManager';
 import { audioService } from '../services/notifications/audioService';
@@ -22,12 +35,19 @@ import {
   Volume2,
   Mic,
   Activity,
+  Search,
+  Zap,
+  Shield,
+  AlertTriangle,
+  Music,
+  Layers,
   ChevronDown,
 } from 'lucide-react';
 
 interface CreateAlertModalProps {
   isOpen: boolean;
   initialAlert?: Alert | null;
+  prefill?: { exchange?: ExchangeName; symbol?: string; baseAsset?: string; quoteAsset?: string } | null;
   settings: AppSettings;
   onClose: () => void;
   onSave: (alertData: Omit<Alert, 'id' | 'createdAt' | 'triggerCount'>, existingId?: string) => void;
@@ -36,6 +56,7 @@ interface CreateAlertModalProps {
 export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
   isOpen,
   initialAlert,
+  prefill,
   settings,
   onClose,
   onSave,
@@ -49,19 +70,62 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
   const [customBaseInput, setCustomBaseInput] = useState('');
   const [isCustomBase, setIsCustomBase] = useState(false);
 
+  // Asset search & category filter state
+  const [assetSearchQuery, setAssetSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [isAssetDropdownOpen, setIsAssetDropdownOpen] = useState(false);
+
   const [type, setType] = useState<AlertType>('repeatingPercentage');
   const [direction, setDirection] = useState<AlertDirection>('both');
   const [targetValue, setTargetValue] = useState<number>(1.0);
   const [customNote, setCustomNote] = useState('');
   const [soundToneOverride, setSoundToneOverride] = useState<SoundTone>('classic');
+  const [customSoundIdOverride, setCustomSoundIdOverride] = useState<string | undefined>(undefined);
   const [voiceAlertOverride, setVoiceAlertOverride] = useState(false);
+  const [activeProfileId, setActiveProfileId] = useState<AlertProfilePresetId | null>('scalper');
 
   const [currentLivePrice, setCurrentLivePrice] = useState<number>(67000);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [customSoundsList, setCustomSoundsList] = useState<CustomSoundItem[]>([]);
 
   // Derived unified symbol
   const effectiveBase = isCustomBase ? customBaseInput.trim().toUpperCase() || 'BTC' : baseAsset;
   const combinedSymbol = `${effectiveBase}${quoteAsset}`;
+
+  // Load custom sounds list on open
+  useEffect(() => {
+    if (isOpen) {
+      setCustomSoundsList(audioService.getCustomSounds());
+    }
+  }, [isOpen]);
+
+  // Filtered Assets list
+  const filteredAssets = useMemo(() => {
+    let list = searchCryptoCatalog(assetSearchQuery);
+    if (selectedCategory !== 'ALL') {
+      if (selectedCategory === 'POPULAR') {
+        list = list.filter((a) => a.isPopular);
+      } else {
+        list = list.filter((a) => a.category === selectedCategory);
+      }
+    }
+    return list;
+  }, [assetSearchQuery, selectedCategory]);
+
+  // Selected coin asset info
+  const selectedCoinInfo = useMemo(() => {
+    return (
+      POPULAR_CRYPTO_ASSETS.find(
+        (a) => a.symbol.toUpperCase() === effectiveBase.toUpperCase()
+      ) || {
+        symbol: effectiveBase,
+        name: effectiveBase,
+        faName: effectiveBase,
+        network: 'Multi-Chain',
+        category: 'L1' as const,
+      }
+    );
+  }, [effectiveBase]);
 
   // Initialize or reset form
   useEffect(() => {
@@ -72,7 +136,9 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
       setTargetValue(initialAlert.targetValue);
       setCustomNote(initialAlert.customNote || '');
       setSoundToneOverride(initialAlert.soundToneOverride || 'classic');
+      setCustomSoundIdOverride(initialAlert.customSoundId);
       setVoiceAlertOverride(!!initialAlert.voiceAlertOverride);
+      setActiveProfileId(null);
 
       if (initialAlert.baseAsset) {
         setBaseAsset(initialAlert.baseAsset);
@@ -80,6 +146,20 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
       if (initialAlert.quoteAsset) {
         setQuoteAsset(initialAlert.quoteAsset);
       }
+    } else if (prefill) {
+      if (prefill.exchange) setExchange(prefill.exchange);
+      if (prefill.baseAsset) setBaseAsset(prefill.baseAsset);
+      if (prefill.quoteAsset) setQuoteAsset(prefill.quoteAsset);
+      setIsCustomBase(false);
+      setCustomBaseInput('');
+      setType('repeatingPercentage');
+      setDirection('both');
+      setTargetValue(0.75);
+      setCustomNote('');
+      setSoundToneOverride('classic');
+      setCustomSoundIdOverride(undefined);
+      setVoiceAlertOverride(false);
+      setActiveProfileId('scalper');
     } else {
       setExchange('Binance');
       setBaseAsset('BTC');
@@ -88,12 +168,14 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
       setCustomBaseInput('');
       setType('repeatingPercentage');
       setDirection('both');
-      setTargetValue(1.0);
+      setTargetValue(0.75);
       setCustomNote('');
       setSoundToneOverride('classic');
+      setCustomSoundIdOverride(undefined);
       setVoiceAlertOverride(false);
+      setActiveProfileId('scalper');
     }
-  }, [initialAlert, isOpen]);
+  }, [initialAlert, prefill, isOpen]);
 
   // Fetch current live price when symbol or exchange changes
   useEffect(() => {
@@ -120,6 +202,18 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Apply Alert Profile Preset
+  const handleApplyProfile = (profile: AlertProfilePreset) => {
+    setActiveProfileId(profile.id);
+    setType(profile.type);
+    setDirection(profile.direction);
+    setTargetValue(profile.targetValue);
+    setSoundToneOverride(profile.soundTone);
+    setVoiceAlertOverride(profile.voiceAlert);
+    const note = settings.language === 'fa' ? profile.descFa : profile.descEn;
+    setCustomNote(note);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (targetValue <= 0) return;
@@ -138,6 +232,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
         hasUnreadTrigger: false,
         customNote: customNote.trim() || undefined,
         soundToneOverride,
+        customSoundId: soundToneOverride === 'custom' ? customSoundIdOverride : undefined,
         voiceAlertOverride,
       },
       initialAlert?.id
@@ -145,18 +240,35 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
     onClose();
   };
 
-  const currentExchangeMeta = EXCHANGES_CATALOG.find((e) => e.id === exchange) || EXCHANGES_CATALOG[0];
-
   const handleTestSound = () => {
-    audioService.playAlertSound(direction !== 'downOnly', type === 'priceTarget', settings.soundVolume, soundToneOverride);
+    audioService.playAlertSound(
+      direction !== 'downOnly',
+      type === 'priceTarget',
+      settings.soundVolume,
+      soundToneOverride,
+      customSoundIdOverride
+    );
     if (voiceAlertOverride) {
       audioService.speakAlert(`${effectiveBase} on ${exchange} reached target`, settings.language);
     }
   };
 
+  const tonesList: { id: SoundTone; label: string }[] = [
+    { id: 'classic', label: t.toneClassic },
+    { id: 'radar', label: t.toneRadar },
+    { id: 'crystal', label: t.toneCrystal },
+    { id: 'chime', label: t.toneChime },
+    { id: 'arcade', label: t.toneArcade },
+    { id: 'cyber', label: t.toneCyber },
+    { id: 'bell', label: t.toneBell },
+    { id: 'siren', label: t.toneSiren },
+    { id: 'emergency', label: t.toneEmergency },
+    { id: 'ping', label: t.tonePing },
+  ];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl p-5 sm:p-7 text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl p-5 sm:p-7 text-slate-100 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -168,7 +280,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
                 {initialAlert ? t.editAlert : t.newAlert}
               </h2>
               <p className="text-xs text-slate-400">
-                Configure BitcoinChecker-style multi-exchange alert
+                Multi-exchange crypto checker with quick strategy presets & custom alarms
               </p>
             </div>
           </div>
@@ -181,7 +293,43 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 pt-4">
-          {/* Step 1: Exchange Selection (15+ supported) */}
+          {/* Section A: 1-Click Alert Profiles (Strategy Presets) */}
+          <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
+                <Zap className="w-4 h-4" />
+                <span>{t.alertProfiles}</span>
+              </label>
+              <span className="text-[10px] text-slate-500 font-mono">1-Click Auto Config</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+              {ALERT_PROFILE_PRESETS.map((profile) => {
+                const isSelected = activeProfileId === profile.id;
+                return (
+                  <button
+                    type="button"
+                    key={profile.id}
+                    onClick={() => handleApplyProfile(profile)}
+                    className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? `bg-gradient-to-br ${profile.color} shadow-sm font-bold scale-[1.02]`
+                        : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="font-bold text-xs truncate w-full">
+                      {settings.language === 'fa' ? profile.nameFa : profile.nameEn}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1 line-clamp-2 leading-tight">
+                      {settings.language === 'fa' ? profile.descFa : profile.descEn}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section B: Exchange Selection */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
               1. {t.exchange}
@@ -193,7 +341,12 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
                   <button
                     type="button"
                     key={ex.id}
-                    onClick={() => setExchange(ex.id)}
+                    onClick={() => {
+                      setExchange(ex.id);
+                      if (ex.id === 'Tabdeal' || ex.id === 'Nobitex') {
+                        setQuoteAsset('TMN');
+                      }
+                    }}
                     className={`flex items-center justify-center py-2 px-1 rounded-xl text-xs font-medium font-mono transition-all ${
                       isSelected
                         ? `${ex.badgeBg} ${ex.color} border ${ex.badgeBorder} shadow-sm font-bold scale-[1.02]`
@@ -207,73 +360,151 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
             </div>
           </div>
 
-          {/* Step 2: Currency Pair Picker (Base Asset + Counter/Quote Asset) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Base Currency (Coin) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  2. {t.baseAsset}
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsCustomBase(!isCustomBase)}
-                  className="text-[11px] text-amber-400 hover:underline"
-                >
-                  {isCustomBase ? 'Select Popular' : '+ Custom Coin'}
-                </button>
-              </div>
+          {/* Section C: English-First Universal Coin Search & Network Discovery */}
+          <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-cyan-400" />
+                <span>2. {t.baseAsset} (Universal English Crypto Search)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomBase(!isCustomBase);
+                  setIsAssetDropdownOpen(false);
+                }}
+                className="text-[11px] text-amber-400 hover:underline font-medium"
+              >
+                {isCustomBase ? 'Back to Coin Catalog' : '+ Custom Ticker'}
+              </button>
+            </div>
 
-              {isCustomBase ? (
+            {isCustomBase ? (
+              <div className="space-y-1.5">
                 <input
                   type="text"
                   value={customBaseInput}
                   onChange={(e) => setCustomBaseInput(e.target.value)}
-                  placeholder="e.g. MONERO, KAS, SUI"
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white uppercase font-mono text-sm focus:outline-none focus:border-amber-500"
+                  placeholder="Enter custom ticker (e.g. MONERO, SUI, KAS, GRASS, TRUMP)"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white uppercase font-mono text-sm focus:outline-none focus:border-amber-500"
                 />
-              ) : (
-                <select
-                  value={baseAsset}
-                  onChange={(e) => setBaseAsset(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-sm focus:outline-none focus:border-amber-500"
-                >
-                  {POPULAR_CRYPTO_ASSETS.map((asset) => (
-                    <option key={asset.symbol} value={asset.symbol}>
-                      {asset.symbol} · {settings.language === 'fa' ? asset.faName : asset.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
+                <span className="text-[10px] text-slate-500 block">
+                  You can type any token ticker listed on {exchange}.
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* Search Input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={assetSearchQuery}
+                    onChange={(e) => {
+                      setAssetSearchQuery(e.target.value);
+                      setIsAssetDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsAssetDropdownOpen(true)}
+                    placeholder={t.searchCryptoPrompt}
+                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
 
-            {/* Counter Currency (Quote) */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                3. {t.quoteAsset}
-              </label>
-              <select
-                value={quoteAsset}
-                onChange={(e) => setQuoteAsset(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-sm focus:outline-none focus:border-amber-500"
-              >
-                {SUPPORTED_QUOTE_CURRENCIES.map((q) => (
-                  <option key={q.code} value={q.code}>
-                    {q.code} ({q.symbol}) · {settings.language === 'fa' ? q.faName : q.name}
-                  </option>
-                ))}
-              </select>
+                {/* Category Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+                  {[
+                    { id: 'ALL', label: t.allCategories },
+                    { id: 'POPULAR', label: '🔥 Top 20' },
+                    { id: 'L1', label: t.catL1 },
+                    { id: 'Meme', label: t.catMeme },
+                    { id: 'AI', label: t.catAI },
+                    { id: 'DeFi', label: t.catDeFi },
+                    { id: 'Gaming', label: t.catGaming },
+                  ].map((cat) => (
+                    <button
+                      type="button"
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className={`px-2.5 py-1 rounded-lg font-medium transition-all whitespace-nowrap ${
+                        selectedCategory === cat.id
+                          ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Coin Grid Picker */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1 bg-slate-900/60 rounded-xl border border-slate-800">
+                  {filteredAssets.slice(0, 48).map((asset) => {
+                    const isSelected = baseAsset === asset.symbol;
+                    return (
+                      <button
+                        type="button"
+                        key={asset.symbol}
+                        onClick={() => {
+                          setBaseAsset(asset.symbol);
+                          setIsCustomBase(false);
+                        }}
+                        className={`flex flex-col items-start p-2 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'bg-amber-500/15 border-amber-500/50 text-white font-bold shadow'
+                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="font-mono font-bold text-xs text-amber-400">{asset.symbol}</span>
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
+                            {asset.category}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-300 truncate w-full mt-0.5">{asset.name}</div>
+                        <div className="text-[9px] text-slate-500 font-mono truncate w-full mt-0.5">
+                          {asset.network}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section D: Counter Currency (Quote Asset) */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              3. {t.quoteAsset}
+            </label>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+              {SUPPORTED_QUOTE_CURRENCIES.slice(0, 6).map((q) => (
+                <button
+                  type="button"
+                  key={q.code}
+                  onClick={() => setQuoteAsset(q.code)}
+                  className={`py-2 px-2 rounded-xl text-xs font-mono border text-center transition-all ${
+                    quoteAsset === q.code
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold shadow'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className="font-bold">{q.code}</div>
+                  <div className="text-[10px] text-slate-400">{q.symbol}</div>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Live Price Benchmark Card */}
+          {/* Live Benchmark Banner */}
           <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-950 to-slate-900 border border-slate-800 flex items-center justify-between">
             <div>
-              <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+              <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
                 <span>Selected Pair:</span>
                 <span className="text-amber-400 font-bold">{combinedSymbol}</span>
                 <span>on</span>
                 <span className="text-white font-semibold">{exchange}</span>
+                <span className="text-xs text-slate-500">({selectedCoinInfo.network})</span>
               </div>
               <div className="text-xl font-bold font-mono text-white tabular-nums flex items-center gap-2 mt-0.5">
                 <span>{formatCurrencyPrice(currentLivePrice, quoteAsset)}</span>
@@ -287,7 +518,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
             </div>
           </div>
 
-          {/* Step 3: Alert Type Selector */}
+          {/* Section E: Alert Type Selector */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               4. {t.alertType}
@@ -307,6 +538,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
                     key={item.id}
                     onClick={() => {
                       setType(item.id as AlertType);
+                      setActiveProfileId(null);
                       if (item.id === 'priceTarget') {
                         setTargetValue(
                           direction === 'downOnly'
@@ -335,7 +567,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
             </div>
           </div>
 
-          {/* Direction Filter */}
+          {/* Section F: Direction Filter */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               5. {t.direction}
@@ -352,7 +584,10 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
                   <button
                     type="button"
                     key={d.id}
-                    onClick={() => setDirection(d.id as AlertDirection)}
+                    onClick={() => {
+                      setDirection(d.id as AlertDirection);
+                      setActiveProfileId(null);
+                    }}
                     className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
                       isSelected
                         ? 'bg-amber-500/10 border-amber-500/50 text-white font-bold'
@@ -367,7 +602,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
             </div>
           </div>
 
-          {/* Target Value Input */}
+          {/* Section G: Target Value Input */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
               6. {t.targetValue} {type === 'repeatingPercentage' || type === 'trailingPeak' ? '(%)' : `(${quoteAsset})`}
@@ -379,7 +614,10 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
                 min="0.00000001"
                 required
                 value={targetValue}
-                onChange={(e) => setTargetValue(parseFloat(e.target.value) || 0)}
+                onChange={(e) => {
+                  setTargetValue(parseFloat(e.target.value) || 0);
+                  setActiveProfileId(null);
+                }}
                 className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-base focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
               />
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-xs text-slate-400">
@@ -389,13 +627,16 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
 
             {/* Smart Presets */}
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-[11px] text-slate-400">Presets:</span>
+              <span className="text-[11px] text-slate-400">Quick:</span>
               {type === 'repeatingPercentage' &&
-                [0.5, 1.0, 2.0, 5.0].map((val) => (
+                [0.5, 0.75, 1.0, 2.0, 5.0, 10.0].map((val) => (
                   <button
                     type="button"
                     key={val}
-                    onClick={() => setTargetValue(val)}
+                    onClick={() => {
+                      setTargetValue(val);
+                      setActiveProfileId(null);
+                    }}
                     className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300"
                   >
                     {val}%
@@ -429,7 +670,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
             </div>
           </div>
 
-          {/* Alarm Ringtone & Voice Alert Options (BitcoinChecker tribute) */}
+          {/* Section H: Alarm Ringtone (Built-in + Custom Uploaded Sounds) */}
           <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -441,26 +682,22 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
                 onClick={handleTestSound}
                 className="text-[11px] font-mono text-amber-400 hover:underline flex items-center gap-1"
               >
-                <span>{t.testSound}</span>
+                <span>{t.testSound} 🔊</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
-              {[
-                { id: 'classic', label: t.toneClassic },
-                { id: 'radar', label: t.toneRadar },
-                { id: 'crystal', label: t.toneCrystal },
-                { id: 'cyber', label: t.toneCyber },
-                { id: 'bell', label: t.toneBell },
-                { id: 'siren', label: t.toneSiren },
-                { id: 'ping', label: t.tonePing },
-              ].map((toneItem) => (
+            {/* Built-in Tones */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+              {tonesList.map((toneItem) => (
                 <button
                   type="button"
                   key={toneItem.id}
-                  onClick={() => setSoundToneOverride(toneItem.id as SoundTone)}
+                  onClick={() => {
+                    setSoundToneOverride(toneItem.id);
+                    setCustomSoundIdOverride(undefined);
+                  }}
                   className={`py-1.5 px-2 rounded-xl text-[11px] font-medium border text-center transition-all ${
-                    soundToneOverride === toneItem.id
+                    soundToneOverride === toneItem.id && !customSoundIdOverride
                       ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold'
                       : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
                   }`}
@@ -469,6 +706,38 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
                 </button>
               ))}
             </div>
+
+            {/* Custom Uploaded Sounds if any */}
+            {customSoundsList.length > 0 && (
+              <div className="pt-2 border-t border-slate-800/80">
+                <span className="text-[11px] font-bold text-cyan-400 block mb-1.5 flex items-center gap-1">
+                  <Music className="w-3.5 h-3.5" />
+                  <span>Custom Uploaded Ringtones:</span>
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {customSoundsList.map((cs) => {
+                    const isSelected = soundToneOverride === 'custom' && customSoundIdOverride === cs.id;
+                    return (
+                      <button
+                        type="button"
+                        key={cs.id}
+                        onClick={() => {
+                          setSoundToneOverride('custom');
+                          setCustomSoundIdOverride(cs.id);
+                        }}
+                        className={`py-1.5 px-2 rounded-xl text-[11px] font-mono border text-left transition-all truncate ${
+                          isSelected
+                            ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
+                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        🎵 {cs.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* TTS Voice Toggle */}
             <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
@@ -485,7 +754,7 @@ export const CreateAlertModal: React.FC<CreateAlertModalProps> = ({
             </div>
           </div>
 
-          {/* Custom Note */}
+          {/* Section I: Custom Memo / Note */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
               {t.customNote}

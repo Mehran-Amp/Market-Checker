@@ -13,12 +13,14 @@ export type ExchangeName =
   | 'Gemini'
   | 'Poloniex'
   | 'Bitget'
+  | 'Tabdeal'
+  | 'Nobitex'
   | 'CoinGecko';
 
 export interface ExchangeMetadata {
   id: ExchangeName;
   name: string;
-  category: 'global' | 'us' | 'europe' | 'asia' | 'aggregator';
+  category: 'global' | 'us' | 'europe' | 'asia' | 'iran' | 'aggregator';
   supportedQuotes: string[];
   hasWebSocket: boolean;
   color: string;
@@ -49,6 +51,8 @@ export interface SymbolInfo {
   displayName: string; // "Bitcoin"
   faDisplayName?: string; // "بیت‌کوین"
   exchange: ExchangeName;
+  network?: string; // "Bitcoin", "Ethereum (ERC-20)", "Solana (SPL)", "TON", etc.
+  category?: 'L1' | 'L2' | 'DeFi' | 'Meme' | 'AI' | 'Gaming' | 'RWA' | 'DePIN' | 'Infra' | 'Forex' | 'Metals' | 'Energy' | 'Stocks' | 'Indices' | 'Bonds';
   isPopular?: boolean;
 }
 
@@ -68,7 +72,40 @@ export type SoundTone =
   | 'cyber'
   | 'bell'
   | 'siren'
-  | 'ping';
+  | 'ping'
+  | 'chime'
+  | 'arcade'
+  | 'emergency'
+  | 'custom';
+
+export interface CustomSoundItem {
+  id: string;
+  name: string;
+  dataUrl: string;
+  createdAt: number;
+}
+
+export type AlertProfilePresetId =
+  | 'scalper'
+  | 'swing'
+  | 'hodler'
+  | 'crash_hunter'
+  | 'volatility';
+
+export interface AlertProfilePreset {
+  id: AlertProfilePresetId;
+  nameEn: string;
+  nameFa: string;
+  descEn: string;
+  descFa: string;
+  icon: string;
+  type: AlertType;
+  targetValue: number;
+  direction: AlertDirection;
+  soundTone: SoundTone;
+  voiceAlert: boolean;
+  color: string;
+}
 
 export type VibrationPatternType = 'single' | 'double' | 'long' | 'sos';
 
@@ -95,6 +132,7 @@ export interface Alert {
   customNote?: string;
   snoozedUntil?: number; // timestamp until when alert is silenced
   soundToneOverride?: SoundTone;
+  customSoundId?: string;
   voiceAlertOverride?: boolean;
 }
 
@@ -145,6 +183,7 @@ export interface AppSettings {
   soundEnabled: boolean;
   soundVolume: number; // 0 to 1
   soundTone: SoundTone;
+  selectedCustomSoundId?: string;
   voiceAlerts: boolean;
   vibration: boolean;
   vibrationPattern: VibrationPatternType;

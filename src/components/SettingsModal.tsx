@@ -1,11 +1,19 @@
-import React, { useState, useRef } from 'react';
-import { AppSettings, AlertTriggerLog, AppTheme, SoundTone, VibrationPatternType, RefreshInterval } from '../types/crypto';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  AppSettings,
+  AlertTriggerLog,
+  AppTheme,
+  SoundTone,
+  VibrationPatternType,
+  RefreshInterval,
+  CustomSoundItem,
+} from '../types/crypto';
 import { getTranslation, SUPPORTED_LANGUAGES } from '../utils/i18n';
 import { audioService } from '../services/notifications/audioService';
 import { notificationService } from '../services/notifications/notificationService';
 import { ForegroundServiceState } from '../services/backgroundService/foregroundService';
 import { AlertStorage } from '../services/alertEngine/alertStorage';
-import { POPULAR_CRYPTO_ASSETS } from '../services/exchanges/symbolData';
+import { POPULAR_CRYPTO_ASSETS, ALERT_PROFILE_PRESETS } from '../services/exchanges/symbolData';
 import {
   X,
   Volume2,
@@ -22,6 +30,10 @@ import {
   Check,
   Clock,
   Mic,
+  Music,
+  Zap,
+  Play,
+  Plus,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -45,10 +57,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const t = getTranslation(settings.language);
-  const [activeTab, setActiveTab] = useState<'general' | 'audio' | 'service' | 'backup' | 'logs'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'audio' | 'profiles' | 'service' | 'backup' | 'logs'>('general');
   const [notifPermissionState, setNotifPermissionState] = useState(notificationService.hasPermission());
   const [backupStatus, setBackupStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [customSounds, setCustomSounds] = useState<CustomSoundItem[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const soundUploadInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setCustomSounds(audioService.getCustomSounds());
+  }, []);
 
   const update = (partial: Partial<AppSettings>) => {
     onUpdateSettings({ ...settings, ...partial });
@@ -78,6 +98,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1.5 * 1024 * 1024) {
+      setUploadError('Audio file must be under 1.5 MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) {
+        const soundName = file.name.replace(/\.[^/.]+$/, '').slice(0, 30);
+        const item = audioService.saveCustomSound(soundName, dataUrl);
+        setCustomSounds(audioService.getCustomSounds());
+        update({ soundTone: 'custom', selectedCustomSoundId: item.id });
+        audioService.playCustomAudio(dataUrl, settings.soundVolume);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleDeleteCustomSound = (id: string) => {
+    audioService.deleteCustomSound(id);
+    const updated = audioService.getCustomSounds();
+    setCustomSounds(updated);
+    if (settings.selectedCustomSoundId === id) {
+      update({
+        soundTone: updated.length > 0 ? 'custom' : 'classic',
+        selectedCustomSoundId: updated.length > 0 ? updated[0].id : undefined,
+      });
+    }
+  };
+
   const handleExportBackup = () => {
     const jsonStr = AlertStorage.exportFullBackup();
     const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -87,7 +144,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     a.download = `market_checker_backup_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setBackupStatus({ type: 'success', message: 'Backup file exported successfully!' });
+    setBackupStatus({ type: 'success', message: 'Full backup exported successfully!' });
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,9 +184,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'classic', label: t.toneClassic },
     { id: 'radar', label: t.toneRadar },
     { id: 'crystal', label: t.toneCrystal },
+    { id: 'chime', label: t.toneChime },
+    { id: 'arcade', label: t.toneArcade },
     { id: 'cyber', label: t.toneCyber },
     { id: 'bell', label: t.toneBell },
     { id: 'siren', label: t.toneSiren },
+    { id: 'emergency', label: t.toneEmergency },
     { id: 'ping', label: t.tonePing },
   ];
 
@@ -177,7 +237,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {[
             { id: 'general', label: 'Language & Theme' },
             { id: 'audio', label: t.soundSettings },
-            { id: 'service', label: 'Check Frequency & Ticker' },
+            { id: 'profiles', label: t.alertProfiles },
+            { id: 'service', label: 'Frequency & Ticker' },
             { id: 'backup', label: 'Backup (JSON)' },
             { id: 'logs', label: `${t.logs} (${logs.length})` },
           ].map((tab) => {
@@ -201,7 +262,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* 1. General Tab */}
           {activeTab === 'general' && (
             <div className="space-y-4">
-              {/* 7 Languages Grid */}
+              {/* Languages Grid */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
                   <Globe className="w-3.5 h-3.5 text-amber-400" />
@@ -289,7 +350,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* 2. Audio & Notifications Tab */}
+          {/* 2. Audio & Custom Sounds Tab */}
           {activeTab === 'audio' && (
             <div className="space-y-4">
               {/* Sound Enabled */}
@@ -330,8 +391,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                   <div className="mt-2 flex justify-end">
                     <button
-                      onClick={() => audioService.playTestTone(settings.soundVolume, settings.soundTone)}
-                      className="px-3 py-1 text-xs rounded-lg bg-slate-800 text-amber-400 hover:bg-slate-700"
+                      onClick={() => audioService.playTestTone(settings.soundVolume, settings.soundTone, settings.selectedCustomSoundId)}
+                      className="px-3 py-1 text-xs rounded-lg bg-slate-800 text-amber-400 hover:bg-slate-700 font-mono"
                     >
                       {t.testSound} 🔊
                     </button>
@@ -339,7 +400,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Tone Selection (BitcoinChecker Classic & Modern Tones) */}
+              {/* Custom Ringtone Uploader */}
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-cyan-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Music className="w-4 h-4 text-cyan-400" />
+                    <div>
+                      <span className="font-bold text-white text-xs">{t.customRingtone}</span>
+                      <p className="text-[11px] text-slate-400">{t.uploadCustomAudio}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => soundUploadInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Upload Audio</span>
+                  </button>
+                  <input
+                    ref={soundUploadInputRef}
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.ogg,.m4a"
+                    onChange={handleSoundUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                {uploadError && (
+                  <div className="text-xs text-rose-400 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                    {uploadError}
+                  </div>
+                )}
+
+                {customSounds.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800 text-center text-xs text-slate-500">
+                    {t.noCustomSounds}
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {customSounds.map((s) => {
+                      const isSelected = settings.soundTone === 'custom' && settings.selectedCustomSoundId === s.id;
+                      return (
+                        <div
+                          key={s.id}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                            isSelected
+                              ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 font-bold'
+                              : 'bg-slate-900 border-slate-800 text-slate-300'
+                          }`}
+                        >
+                          <div
+                            onClick={() => update({ soundTone: 'custom', selectedCustomSoundId: s.id })}
+                            className="flex items-center gap-2 cursor-pointer flex-1 truncate"
+                          >
+                            <span className="text-xs font-mono truncate">🎵 {s.name}</span>
+                            {isSelected && <span className="text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded font-mono">Active</span>}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => audioService.playCustomAudio(s.dataUrl, settings.soundVolume)}
+                              title="Play preview"
+                              className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCustomSound(s.id)}
+                              title="Delete sound"
+                              className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Built-in Tones */}
               <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
                 <label className="block text-xs font-semibold text-slate-300 mb-2">{t.soundTone}</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -347,11 +488,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       key={tone.id}
                       onClick={() => {
-                        update({ soundTone: tone.id });
+                        update({ soundTone: tone.id, selectedCustomSoundId: undefined });
                         audioService.playTestTone(settings.soundVolume, tone.id);
                       }}
                       className={`p-2.5 text-xs rounded-xl border text-left transition-all ${
-                        settings.soundTone === tone.id
+                        settings.soundTone === tone.id && !settings.selectedCustomSoundId
                           ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 font-bold'
                           : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
                       }`}
@@ -439,10 +580,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* 3. Service & BitcoinChecker Ticker Tab */}
+          {/* 3. Strategy Profiles Tab */}
+          {activeTab === 'profiles' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <h4 className="font-bold text-white">{t.alertProfiles}</h4>
+                </div>
+                <p className="text-xs text-slate-400 mb-4">{t.alertProfilesDesc}</p>
+
+                <div className="space-y-3">
+                  {ALERT_PROFILE_PRESETS.map((prof) => (
+                    <div
+                      key={prof.id}
+                      className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex items-start justify-between gap-3"
+                    >
+                      <div>
+                        <div className="font-bold text-sm text-white mb-0.5">
+                          {settings.language === 'fa' ? prof.nameFa : prof.nameEn}
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          {settings.language === 'fa' ? prof.descFa : prof.descEn}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 font-mono">
+                            Target: {prof.targetValue}%
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono capitalize">
+                            Tone: {prof.soundTone}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. Service & BitcoinChecker Ticker Tab */}
           {activeTab === 'service' && (
             <div className="space-y-4">
-              {/* Check Frequency / Polling Interval (BitcoinChecker feature) */}
+              {/* Check Frequency */}
               <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
                 <div className="flex items-center gap-2 mb-2">
                   <Clock className="w-4 h-4 text-amber-400" />
@@ -521,13 +701,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* 4. Backup & Restore Tab */}
+          {/* 5. Backup & Restore Tab */}
           {activeTab === 'backup' && (
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
                 <h4 className="font-bold text-white mb-1">{t.backupRestore}</h4>
                 <p className="text-xs text-slate-400 mb-4">
-                  Export all your checkers, exchange preferences, and alarm settings into a JSON backup file.
+                  Export all your checkers, custom ringtones, exchange preferences, and alarm settings into a JSON backup file.
                 </p>
 
                 {backupStatus && (
@@ -570,7 +750,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* 5. Logs Tab */}
+          {/* 6. Logs Tab */}
           {activeTab === 'logs' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">

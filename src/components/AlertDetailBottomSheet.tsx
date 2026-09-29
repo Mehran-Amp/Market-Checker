@@ -94,7 +94,8 @@ export const AlertDetailBottomSheet: React.FC<AlertDetailBottomSheetProps> = ({
 
   const handleTestTone = () => {
     const tone = alert.soundToneOverride || settings.soundTone || 'classic';
-    audioService.playAlertSound(alert.direction !== 'downOnly', alert.type === 'priceTarget', settings.soundVolume, tone);
+    const customSoundId = alert.customSoundId || settings.selectedCustomSoundId;
+    audioService.playAlertSound(alert.direction !== 'downOnly', alert.type === 'priceTarget', settings.soundVolume, tone, customSoundId);
     if (alert.voiceAlertOverride || settings.voiceAlerts) {
       audioService.speakAlert(`${alert.symbol} alert on ${alert.exchange}`, settings.language);
     }

@@ -3,6 +3,7 @@ import { Alert, CoinPrice, ExchangeName, AppSettings } from '../types/crypto';
 import { getTranslation } from '../utils/i18n';
 import { EXCHANGES_CATALOG, formatCurrencyPrice } from '../services/exchanges/symbolData';
 import { ExchangeManager } from '../services/exchanges/exchangeManager';
+import { MultiMarketExplore } from './MultiMarketExplore';
 import {
   Plus,
   Search,
@@ -21,13 +22,15 @@ import {
   Clock,
   Volume2,
   SlidersHorizontal,
+  Globe2,
+  Layers,
 } from 'lucide-react';
 
 interface WatchlistScreenProps {
   alerts: Alert[];
   prices: Record<string, CoinPrice>; // key: `${exchange}_${symbol}`
   settings: AppSettings;
-  onOpenCreate: () => void;
+  onOpenCreate: (prefill?: { exchange?: ExchangeName; symbol?: string; baseAsset?: string; quoteAsset?: string }) => void;
   onSelectAlert: (alert: Alert) => void;
   onToggleActive: (id: string, e: React.MouseEvent) => void;
   onMarkAsRead: (id: string, e: React.MouseEvent) => void;
@@ -49,6 +52,7 @@ export const WatchlistScreen: React.FC<WatchlistScreenProps> = ({
   onDeleteAlert,
 }) => {
   const t = getTranslation(settings.language);
+  const [activeView, setActiveView] = useState<'alerts' | 'globalMarkets'>('alerts');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'unread' | 'paused'>('all');
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeName | 'ALL'>('ALL');
@@ -119,7 +123,7 @@ export const WatchlistScreen: React.FC<WatchlistScreenProps> = ({
     const height = 32;
 
     const points = sparkline
-      .map((val, idx) => {
+      .map((val: number, idx: number) => {
         const x = (idx / (sparkline.length - 1)) * width;
         const y = height - ((val - min) / range) * (height - 6) - 3;
         return `${x},${y}`;
@@ -142,93 +146,137 @@ export const WatchlistScreen: React.FC<WatchlistScreenProps> = ({
 
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 py-5 sm:px-6 pb-28">
-      {/* Top Stat Summary Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
-          <div className="text-xs text-slate-400 font-medium mb-1">{t.activeAlerts}</div>
-          <div className="text-2xl font-bold font-mono text-emerald-400 tabular-nums flex items-center justify-between">
-            <span>{activeCount}</span>
-            <Zap className="w-5 h-5 text-emerald-400/60" />
-          </div>
+      {/* Primary Market Mode Switcher (Zero-pill, clean segmented tabs) */}
+      <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-800/80">
+        <div className="flex items-center p-1 rounded-2xl bg-slate-900 border border-slate-800">
+          <button
+            onClick={() => setActiveView('alerts')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeView === 'alerts'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>{settings.language === 'fa' ? 'هشدارهای من' : 'My Active Alerts'}</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${activeView === 'alerts' ? 'bg-black/20 text-black' : 'bg-slate-800 text-slate-400'}`}>
+              {alerts.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveView('globalMarkets')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeView === 'globalMarkets'
+                ? 'bg-emerald-500 text-slate-950 shadow-md font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Globe2 className="w-4 h-4" />
+            <span>{settings.language === 'fa' ? 'فارکس، طلا، نفت و سهام جهانی' : 'Forex, Metals, Oil & Stocks'}</span>
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+            </span>
+          </button>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
-          <div className="text-xs text-slate-400 font-medium mb-1">{t.unreadAlerts}</div>
-          <div className="text-2xl font-bold font-mono text-amber-400 tabular-nums flex items-center justify-between">
-            <span>{unreadCount}</span>
-            <Bell className="w-5 h-5 text-amber-400/60" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
-          <div className="text-xs text-slate-400 font-medium mb-1">{t.monitoredPairs}</div>
-          <div className="text-2xl font-bold font-mono text-cyan-400 tabular-nums flex items-center justify-between">
-            <span>{alerts.length}</span>
-            <TrendingUp className="w-5 h-5 text-cyan-400/60" />
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
-          <div className="text-xs text-slate-400 font-medium mb-1">{t.refreshInterval}</div>
-          <div className="text-lg font-bold font-mono text-slate-200 tabular-nums flex items-center justify-between">
-            <span className="capitalize">{settings.refreshInterval}</span>
-            <Clock className="w-5 h-5 text-slate-400/60" />
-          </div>
-        </div>
-      </div>
-
-      {/* Control Bar: Search + Filter Tabs + New Alert Button */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
-        {/* Search Input */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t.searchPlaceholder}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-          />
-        </div>
-
-        {/* Status Filter Tabs */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-medium">
-          {(['all', 'active', 'unread', 'paused'] as const).map((filter) => {
-            const isSelected = statusFilter === filter;
-            const label =
-              filter === 'all'
-                ? t.filterAll
-                : filter === 'active'
-                ? t.filterActive
-                : filter === 'unread'
-                ? t.filterUnread
-                : t.filterPaused;
-
-            return (
-              <button
-                key={filter}
-                onClick={() => setStatusFilter(filter)}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  isSelected
-                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Floating / Sticky New Alert Trigger Button */}
         <button
-          onClick={onOpenCreate}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:opacity-95 shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+          onClick={() => onOpenCreate()}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:opacity-95 shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>{t.newAlert}</span>
         </button>
       </div>
+
+      {activeView === 'globalMarkets' ? (
+        <MultiMarketExplore
+          settings={settings}
+          onQuickCreateAlert={(exchange, symbol, baseAsset, quoteAsset) => {
+            onOpenCreate({ exchange, symbol, baseAsset, quoteAsset });
+          }}
+        />
+      ) : (
+        <>
+          {/* Top Stat Summary Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
+              <div className="text-xs text-slate-400 font-medium mb-1">{t.activeAlerts}</div>
+              <div className="text-2xl font-bold font-mono text-emerald-400 tabular-nums flex items-center justify-between">
+                <span>{activeCount}</span>
+                <Zap className="w-5 h-5 text-emerald-400/60" />
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
+              <div className="text-xs text-slate-400 font-medium mb-1">{t.unreadAlerts}</div>
+              <div className="text-2xl font-bold font-mono text-amber-400 tabular-nums flex items-center justify-between">
+                <span>{unreadCount}</span>
+                <Bell className="w-5 h-5 text-amber-400/60" />
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
+              <div className="text-xs text-slate-400 font-medium mb-1">{t.monitoredPairs}</div>
+              <div className="text-2xl font-bold font-mono text-cyan-400 tabular-nums flex items-center justify-between">
+                <span>{alerts.length}</span>
+                <TrendingUp className="w-5 h-5 text-cyan-400/60" />
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
+              <div className="text-xs text-slate-400 font-medium mb-1">{t.refreshInterval}</div>
+              <div className="text-lg font-bold font-mono text-slate-200 tabular-nums flex items-center justify-between">
+                <span className="capitalize">{settings.refreshInterval}</span>
+                <Clock className="w-5 h-5 text-slate-400/60" />
+              </div>
+            </div>
+          </div>
+
+          {/* Control Bar: Search + Filter Tabs + New Alert Button */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t.searchPlaceholder}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            {/* Status Filter Tabs */}
+            <div className="flex items-center p-1 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-medium">
+              {(['all', 'active', 'unread', 'paused'] as const).map((filter) => {
+                const isSelected = statusFilter === filter;
+                const label =
+                  filter === 'all'
+                    ? t.filterAll
+                    : filter === 'active'
+                    ? t.filterActive
+                    : filter === 'unread'
+                    ? t.filterUnread
+                    : t.filterPaused;
+
+                return (
+                  <button
+                    key={filter}
+                    onClick={() => setStatusFilter(filter)}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      isSelected
+                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 font-bold'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
       {/* Exchange Filter Row (All 15+ BitcoinChecker Exchanges) */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-none">
@@ -240,7 +288,7 @@ export const WatchlistScreen: React.FC<WatchlistScreenProps> = ({
               : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
           }`}
         >
-          ALL (15+)
+          ALL ({EXCHANGES_CATALOG.length})
         </button>
 
         {EXCHANGES_CATALOG.map((ex) => {
@@ -270,7 +318,7 @@ export const WatchlistScreen: React.FC<WatchlistScreenProps> = ({
           <h3 className="text-base font-bold text-white mb-1">{t.noAlertsFound}</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5">{t.noAlertsSub}</p>
           <button
-            onClick={onOpenCreate}
+            onClick={() => onOpenCreate()}
             className="px-5 py-2 rounded-xl text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors inline-flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
@@ -433,6 +481,8 @@ export const WatchlistScreen: React.FC<WatchlistScreenProps> = ({
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );

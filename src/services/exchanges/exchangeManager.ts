@@ -33,8 +33,12 @@ export class ExchangeManager {
     Gemini: { name: 'Gemini', status: 'connected', pingMs: 50, subscribedCount: 0, lastMessageAt: Date.now() },
     Poloniex: { name: 'Poloniex', status: 'connected', pingMs: 52, subscribedCount: 0, lastMessageAt: Date.now() },
     Bitget: { name: 'Bitget', status: 'connected', pingMs: 35, subscribedCount: 0, lastMessageAt: Date.now() },
+    Tabdeal: { name: 'Tabdeal', status: 'connected', pingMs: 45, subscribedCount: 0, lastMessageAt: Date.now() },
+    Nobitex: { name: 'Nobitex', status: 'connected', pingMs: 42, subscribedCount: 0, lastMessageAt: Date.now() },
     CoinGecko: { name: 'CoinGecko', status: 'connected', pingMs: 65, subscribedCount: 0, lastMessageAt: Date.now() },
   };
+
+  private usdtTomanPrice: number = 93500; // Cached live Tether Toman rate
 
   private priceListeners: Set<PriceListener> = new Set();
   private statusListeners: Set<StatusListener> = new Set();
@@ -423,6 +427,101 @@ export class ExchangeManager {
               return parseFloat(data.data[0].lastPr);
             }
           }
+          break;
+        }
+
+        case 'Tabdeal': {
+          // Tabdeal (تبدیل) API & Toman Spot Market
+          const isToman = cleanSym.endsWith('TMN') || cleanSym.endsWith('IRT') || cleanSym.endsWith('IRR');
+          let baseCoin = 'BTC';
+          for (const q of ['TMN', 'IRT', 'IRR', 'USDT', 'USDC']) {
+            if (cleanSym.endsWith(q)) {
+              baseCoin = cleanSym.slice(0, -q.length);
+              break;
+            }
+          }
+
+          // Fetch Tabdeal / Nobitex live Toman orderbook or stats
+          try {
+            const nobiRes = await fetch('https://api.nobitex.ir/market/stats');
+            if (nobiRes.ok) {
+              const nobiData = await nobiRes.json();
+              if (nobiData?.['usdt-rls']?.latest) {
+                this.usdtTomanPrice = Math.round(parseFloat(nobiData['usdt-rls'].latest) / 10);
+              }
+
+              if (baseCoin === 'USDT' && isToman) {
+                return this.usdtTomanPrice;
+              }
+
+              const pairKey = `${baseCoin.toLowerCase()}-rls`;
+              if (nobiData?.[pairKey]?.latest) {
+                const rialPrice = parseFloat(nobiData[pairKey].latest);
+                return cleanSym.endsWith('IRR') ? rialPrice : Math.round(rialPrice / 10);
+              }
+            }
+          } catch (e) {}
+
+          // Fallback: Calculate from Binance/Global USD price * Live USDT/TMN Rate
+          try {
+            const bRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${baseCoin}USDT`);
+            if (bRes.ok) {
+              const bData = await bRes.json();
+              const usdtPrice = parseFloat(bData.price || '0');
+              if (usdtPrice > 0) {
+                if (isToman) {
+                  return Math.round(usdtPrice * this.usdtTomanPrice);
+                } else {
+                  return usdtPrice;
+                }
+              }
+            }
+          } catch (e) {}
+          break;
+        }
+
+        case 'Nobitex': {
+          // Nobitex (نوبیتکس)
+          const isToman = cleanSym.endsWith('TMN') || cleanSym.endsWith('IRT') || cleanSym.endsWith('IRR');
+          let baseCoin = 'BTC';
+          for (const q of ['TMN', 'IRT', 'IRR', 'USDT', 'RLS']) {
+            if (cleanSym.endsWith(q)) {
+              baseCoin = cleanSym.slice(0, -q.length);
+              break;
+            }
+          }
+
+          try {
+            const nobiRes = await fetch('https://api.nobitex.ir/market/stats');
+            if (nobiRes.ok) {
+              const nobiData = await nobiRes.json();
+              if (nobiData?.['usdt-rls']?.latest) {
+                this.usdtTomanPrice = Math.round(parseFloat(nobiData['usdt-rls'].latest) / 10);
+              }
+
+              if (baseCoin === 'USDT' && isToman) {
+                return this.usdtTomanPrice;
+              }
+
+              const pairKey = `${baseCoin.toLowerCase()}-rls`;
+              if (nobiData?.[pairKey]?.latest) {
+                const rialPrice = parseFloat(nobiData[pairKey].latest);
+                return cleanSym.endsWith('IRR') ? rialPrice : Math.round(rialPrice / 10);
+              }
+            }
+          } catch (e) {}
+
+          // Fallback: Global price * USDT/TMN rate
+          try {
+            const bRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${baseCoin}USDT`);
+            if (bRes.ok) {
+              const bData = await bRes.json();
+              const usdtPrice = parseFloat(bData.price || '0');
+              if (usdtPrice > 0) {
+                return isToman ? Math.round(usdtPrice * this.usdtTomanPrice) : usdtPrice;
+              }
+            }
+          } catch (e) {}
           break;
         }
       }

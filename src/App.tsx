@@ -40,6 +40,7 @@ export default function App() {
   const [isFlutterExportOpen, setIsFlutterExportOpen] = useState(false);
   const [selectedAlertForDetail, setSelectedAlertForDetail] = useState<Alert | null>(null);
   const [alertForEdit, setAlertForEdit] = useState<Alert | null>(null);
+  const [createPrefill, setCreatePrefill] = useState<{ exchange?: ExchangeName; symbol?: string; baseAsset?: string; quoteAsset?: string } | null>(null);
 
   // Unread count
   const unreadAlertsCount = alerts.filter((a) => a.hasUnreadTrigger).length;
@@ -95,9 +96,15 @@ export default function App() {
     if (settings.theme === 'light') {
       document.documentElement.classList.remove('dark');
       document.documentElement.classList.add('light');
+      document.documentElement.setAttribute('data-theme', 'light');
+      document.body.classList.remove('dark');
+      document.body.classList.add('light');
     } else {
       document.documentElement.classList.remove('light');
       document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.body.classList.remove('light');
+      document.body.classList.add('dark');
     }
   }, [settings.language, settings.theme]);
 
@@ -238,8 +245,9 @@ export default function App() {
           alerts={alerts}
           prices={prices}
           settings={settings}
-          onOpenCreate={() => {
+          onOpenCreate={(prefill) => {
             setAlertForEdit(null);
+            setCreatePrefill(prefill || null);
             setIsCreateOpen(true);
           }}
           onSelectAlert={(alert) => setSelectedAlertForDetail(alert)}
@@ -255,10 +263,12 @@ export default function App() {
       <CreateAlertModal
         isOpen={isCreateOpen}
         initialAlert={alertForEdit}
+        prefill={createPrefill}
         settings={settings}
         onClose={() => {
           setIsCreateOpen(false);
           setAlertForEdit(null);
+          setCreatePrefill(null);
         }}
         onSave={handleSaveAlert}
       />

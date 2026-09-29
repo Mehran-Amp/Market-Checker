@@ -198,7 +198,8 @@ export class AlertEngine {
     // Play Audio / Voice / Vibrate (BitcoinChecker options)
     if (settings.soundEnabled) {
       const tone = alert.soundToneOverride || settings.soundTone || 'classic';
-      audioService.playAlertSound(isUp, alert.type === 'priceTarget', settings.soundVolume, tone);
+      const customSoundId = alert.customSoundId || settings.selectedCustomSoundId;
+      audioService.playAlertSound(isUp, alert.type === 'priceTarget', settings.soundVolume, tone, customSoundId);
     }
     if (settings.voiceAlerts || alert.voiceAlertOverride) {
       audioService.speakAlert(msgInfo.title, settings.language);
