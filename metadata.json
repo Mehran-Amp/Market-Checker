@@ -1,0 +1,7 @@
+{
+  "name": "Market Checker - Multi-Exchange Price & Alert Monitor",
+  "description": "Modern multi-exchange cryptocurrency price checker & advanced alert system inspired by Bitcoin Checker. Real-time ticker, background monitoring, customizable alarms, TTS announcements, and global exchange support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
